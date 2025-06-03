@@ -1,0 +1,9 @@
+{
+  "build": {
+    "output": "dist",
+    "cleanUrls": true,
+    "routes": {
+      "/*": "/index.html"
+    }
+  }
+}
