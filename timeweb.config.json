@@ -1,9 +1,12 @@
 {
-  "build": {
-    "output": "dist",
-    "cleanUrls": true,
-    "routes": {
-      "/*": "/index.html"
-    }
+  "engine": "nodejs",
+  "nodeVersion": "18",
+  "startCommand": "npm start",
+  "buildCommand": "npm run build",
+  "installCommand": "npm install",
+  "port": 3000,
+  "env": {
+    "NODE_ENV": "production",
+    "SESSION_SECRET": "your-secret-key"
   }
 }
