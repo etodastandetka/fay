@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Review } from "@shared/schema";
 import { User, Star } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import ExternalLink from "@/components/ExternalLink";
 
 function Testimonials() {
   const { data: reviews = [], isLoading } = useQuery<Review[]>({
@@ -13,8 +14,8 @@ function Testimonials() {
     }
   });
   
-  const formatDate = (dateString: Date) => {
-    const date = new Date(dateString);
+  const formatDate = (dateString: Date | string) => {
+    const date = dateString instanceof Date ? dateString : new Date(dateString);
     return new Intl.DateTimeFormat('ru-RU', {
       day: 'numeric',
       month: 'long',
@@ -46,14 +47,12 @@ function Testimonials() {
           <h2 className="heading font-montserrat font-bold text-2xl md:text-3xl">
             Отзывы наших клиентов
           </h2>
-          <a 
+          <ExternalLink 
             href="https://t.me/junglefeedback" 
-            target="_blank" 
-            rel="noreferrer"
             className="text-primary hover:underline hidden md:block"
           >
             Все отзывы
-          </a>
+          </ExternalLink>
         </div>
         
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -94,7 +93,7 @@ function Testimonials() {
                   </div>
                 </div>
                 <p className="text-gray-700 mb-3">{review.text}</p>
-                <span className="text-gray-500 text-sm">{formatDate(review.createdAt)}</span>
+                <span className="text-gray-500 text-sm">{review.createdAt ? formatDate(review.createdAt) : 'Недавно'}</span>
               </div>
             ))
           ) : (
@@ -167,14 +166,12 @@ function Testimonials() {
         </div>
         
         <div className="text-center mt-6 md:hidden">
-          <a 
+          <ExternalLink 
             href="https://t.me/junglefeedback" 
-            target="_blank" 
-            rel="noreferrer"
             className="text-primary hover:underline"
           >
             Все отзывы
-          </a>
+          </ExternalLink>
         </div>
       </div>
     </section>

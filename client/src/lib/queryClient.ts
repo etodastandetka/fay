@@ -12,6 +12,9 @@ export async function apiRequest(
   url: string,
   data?: unknown | undefined,
 ): Promise<Response> {
+  try {
+    console.log(`API Request: ${method} ${url}`, data);
+    
   const res = await fetch(url, {
     method,
     headers: data ? { "Content-Type": "application/json" } : {},
@@ -19,8 +22,15 @@ export async function apiRequest(
     credentials: "include",
   });
 
-  await throwIfResNotOk(res);
+    // For debugging purposes, log the response status
+    console.log(`API Response status: ${res.status} ${res.statusText}`);
+    
+    // Don't throw right away, let the caller handle the response
   return res;
+  } catch (error) {
+    console.error('API Request error:', error);
+    throw error;
+  }
 }
 
 type UnauthorizedBehavior = "returnNull" | "throw";

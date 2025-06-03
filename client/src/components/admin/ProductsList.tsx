@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Search, Plus, Pencil, Trash2 } from "lucide-react";
+import { Search, Plus, Pencil, Trash2, FileDown } from "lucide-react";
 import { 
   Table, 
   TableBody, 
@@ -75,6 +75,43 @@ export default function ProductsList() {
     product.category.toLowerCase().includes(searchQuery.toLowerCase())
   );
   
+  // Функция для экспорта товаров в Excel
+  const exportProductsToExcel = () => {
+    if (!products || products.length === 0) {
+      toast({
+        title: "Нет данных для экспорта",
+        description: "Список товаров пуст",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      // Используем серверный API для экспорта
+      const exportUrl = `${import.meta.env.VITE_API_BASE_URL || ''}/api/export/products`;
+      
+      // Создаем ссылку и автоматически скачиваем файл
+      const link = document.createElement('a');
+      link.href = exportUrl;
+      link.download = `products_export_${new Date().toISOString().slice(0,10)}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      toast({
+        title: "Экспорт успешно выполнен",
+        description: `Файл с товарами скачивается...`,
+      });
+    } catch (error) {
+      console.error("Ошибка при экспорте товаров:", error);
+      toast({
+        title: "Ошибка экспорта",
+        description: "Не удалось экспортировать данные",
+        variant: "destructive"
+      });
+    }
+  };
+  
   if (showForm) {
     return (
       <div className="p-6">
@@ -106,10 +143,16 @@ export default function ProductsList() {
     <div className="p-6">
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-2xl font-bold">Управление товарами</h2>
-        <Button onClick={() => setShowForm(true)}>
-          <Plus className="w-4 h-4 mr-2" />
-          Добавить товар
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={exportProductsToExcel}>
+            <FileDown className="w-4 h-4 mr-2" />
+            Экспорт в Excel
+          </Button>
+          <Button onClick={() => setShowForm(true)}>
+            <Plus className="w-4 h-4 mr-2" />
+            Добавить товар
+          </Button>
+        </div>
       </div>
       
       <Card className="mb-6">

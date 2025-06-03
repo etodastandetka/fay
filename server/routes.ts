@@ -8,7 +8,10 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 // Import the password functions from auth.ts
-import { comparePasswords, hashPassword } from "./auth";
+await storage.comparePasswords(plain, hashed);
+await storage.hashPassword(password);
+// Import db для прямого доступа к базе данных
+import { db } from "./db-sqlite";
 
 // Configure multer storage
 const fileStorage = multer.diskStorage({
@@ -161,19 +164,71 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/orders", ensureAuthenticated, async (req, res) => {
     try {
       const orderData = insertOrderSchema.parse(req.body);
+      const user = req.user as any; // Получаем пользователя из запроса
       
       // Ensure userId matches authenticated user
-      if (orderData.userId !== req.user.id) {
+      if (orderData.userId !== user.id) {
         return res.status(403).json({ message: "Нельзя создать заказ от имени другого пользователя" });
       }
       
-      const order = await storage.createOrder(orderData);
-      res.status(201).json(order);
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "Неверные данные", errors: error.errors });
+      // Добавляем начальный статус платежа
+      const updatedOrderData = {
+        ...orderData,
+        paymentStatus: orderData.paymentMethod === "balance" ? "completed" : "pending",
+        orderStatus: orderData.paymentMethod === "balance" ? "processing" : "pending"
+      };
+      
+      // Проверяем метод оплаты "balance" и достаточный баланс
+      if (orderData.paymentMethod === "balance") {
+        try {
+          // Получаем текущий баланс пользователя из БД для свежих данных
+          const dbUser = await db.queryOne("SELECT * FROM users WHERE id = ?", [user.id]) as { 
+            balance?: string 
+          };
+
+          // Проверяем баланс и сравниваем с суммой заказа
+          const userBalance = dbUser && dbUser.balance ? parseFloat(dbUser.balance) : 0;
+          const orderTotal = parseFloat(orderData.totalAmount);
+          
+          // Проверяем, достаточно ли средств
+          if (userBalance < orderTotal) {
+            return res.status(400).json({ 
+              message: "Недостаточно средств на балансе", 
+              requiredAmount: orderTotal,
+              availableBalance: userBalance 
+            });
+          }
+          
+          // Списываем деньги с баланса
+          const newBalance = (userBalance - orderTotal).toFixed(2);
+          
+          // Обновляем баланс пользователя в БД
+          await db.run(
+            "UPDATE users SET balance = ?, updated_at = ? WHERE id = ?",
+            [newBalance, new Date().toISOString(), user.id]
+          );
+          
+          // Обновляем баланс в сессии пользователя
+          user.balance = newBalance;
+          
+          console.log(`Баланс пользователя ${user.id} обновлен: ${userBalance} -> ${newBalance}`);
+          
+        } catch (error) {
+          console.error("Ошибка при проверке/обновлении баланса:", error);
+          return res.status(500).json({ 
+            message: "Ошибка при обработке платежа. Пожалуйста, попробуйте позже." 
+          });
+        }
       }
-      throw error;
+      
+      const createdOrder = await storage.createOrder(updatedOrderData);
+      res.json(createdOrder);
+    } catch (error) {
+      console.error("Error creating order:", error);
+      res.status(400).json({ 
+        message: "Failed to create order", 
+        error: error instanceof Error ? error.message : String(error) 
+      });
     }
   });
   
@@ -306,6 +361,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       throw error;
     }
+  });
+  
+  app.delete("/api/reviews/:id", ensureAdmin, async (req, res) => {
+    const id = parseInt(req.params.id);
+    const success = await storage.deleteReview(id);
+    
+    if (!success) {
+      return res.status(404).json({ message: "Отзыв не найден" });
+    }
+    
+    res.status(204).end();
   });
   
   // Get current user's reviews

@@ -1,11 +1,47 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
+import { initAuth, setupAuth } from "./auth"; // Импорт аутентификации
+import Database from 'better-sqlite3';
+import path from 'path';
+import { existsSync, mkdirSync } from 'fs';
+
+// Инициализация базы данных
+const dbDir = path.join(process.cwd(), 'db');
+if (!existsSync(dbDir)) {
+  mkdirSync(dbDir, { recursive: true });
+}
+
+const dbPath = path.join(dbDir, 'database.sqlite');
+const db = new Database(dbPath);
+
+// Включаем необходимые PRAGMA
+db.pragma('journal_mode = WAL');
+db.pragma('foreign_keys = ON');
+
+// Создаем таблицу пользователей, если ее нет
+db.exec(`
+  CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT UNIQUE NOT NULL,
+    email TEXT UNIQUE NOT NULL,
+    password TEXT NOT NULL,
+    first_name TEXT,
+    last_name TEXT,
+    is_admin INTEGER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )
+`);
 
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
+// Инициализация аутентификации
+initAuth(db); // Передаем экземпляр базы данных
+setupAuth(app); // Настраиваем middleware аутентификации
+
+// Логирование запросов
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
@@ -39,32 +75,31 @@ app.use((req, res, next) => {
 (async () => {
   const server = await registerRoutes(app);
 
+  // Обработчик ошибок
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
 
     res.status(status).json({ message });
-    throw err;
+    console.error(err);
   });
 
-  // importantly only setup vite in development and after
-  // setting up all the other routes so the catch-all route
-  // doesn't interfere with the other routes
+  // Настройка Vite в development или статики в production
   if (app.get("env") === "development") {
     await setupVite(app, server);
   } else {
     serveStatic(app);
   }
 
-  // ALWAYS serve the app on port 5000
-  // this serves both the API and the client.
-  // It is the only port that is not firewalled.
+  // Запуск сервера
   const port = 5000;
   server.listen({
     port,
     host: "0.0.0.0",
     reusePort: true,
   }, () => {
-    log(`serving on port ${port}`);
+    log(`Server running on port ${port}`);
+    log(`Environment: ${app.get("env")}`);
+    log(`Database: ${dbPath}`);
   });
 })();

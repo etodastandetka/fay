@@ -48,7 +48,7 @@ import {
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
-import { Loader2, ShoppingCart, Bell, Star, AlertTriangle, ChevronLeft } from "lucide-react";
+import { Loader2, ShoppingCart, Bell, Star, AlertTriangle, ChevronLeft, Truck, Clock, CreditCard, QrCode } from "lucide-react";
 
 // Review form schema
 const reviewSchema = z.object({
@@ -551,38 +551,81 @@ export default function ProductPage() {
         </TabsContent>
         
         <TabsContent value="delivery">
-          <div className="prose max-w-none">
-            <h3 className="heading font-montserrat font-semibold text-xl mb-4">Доставка и оплата</h3>
+          <div className="space-y-6">
+            <div className="bg-gray-50 p-4 rounded-lg">
+              <h3 className="font-medium text-lg mb-3">Информация о доставке</h3>
             
-            <div className="mb-6">
-              <h4 className="font-semibold mb-2">Способы доставки:</h4>
-              <ul className="list-disc pl-6">
-                <li>CDEK - от 300 ₽</li>
-                <li>Почта России - от 250 ₽</li>
-                <li>Экспресс-доставка (+20% к стоимости)</li>
+              <div className="space-y-4">
+                <div>
+                  <p className="font-medium">Стоимость доставки:</p>
+                  {deliveryCost ? (
+                    <p>{formatPrice(deliveryCost)} ₽</p>
+                  ) : (
+                    <p>350 ₽ (стандартная)</p>
+                  )}
+                  <p className="text-sm text-gray-600 mt-1">
+                    * При заказе от 5000 ₽ доставка бесплатная
+                  </p>
+                </div>
+                
+                <div>
+                  <p className="font-medium">Способы доставки:</p>
+                  <ul className="mt-2 space-y-2 text-sm">
+                    <li className="flex items-start">
+                      <Truck className="h-4 w-4 text-primary mt-0.5 mr-2 flex-shrink-0" />
+                      <span>CDEK – доставка в большинство городов России</span>
+                    </li>
+                    <li className="flex items-start">
+                      <Truck className="h-4 w-4 text-primary mt-0.5 mr-2 flex-shrink-0" />
+                      <span>Почта России – доставка в отдаленные регионы</span>
+                    </li>
+                  </ul>
+                </div>
+                
+                <div>
+                  <p className="font-medium">Сроки доставки:</p>
+                  <ul className="mt-2 space-y-2 text-sm">
+                    <li className="flex items-start">
+                      <Clock className="h-4 w-4 text-primary mt-0.5 mr-2 flex-shrink-0" />
+                      <span>Москва и Санкт-Петербург: 1-3 дня</span>
+                    </li>
+                    <li className="flex items-start">
+                      <Clock className="h-4 w-4 text-primary mt-0.5 mr-2 flex-shrink-0" />
+                      <span>Другие города: 3-7 дней</span>
+                    </li>
+                    <li className="flex items-start">
+                      <Clock className="h-4 w-4 text-primary mt-0.5 mr-2 flex-shrink-0" />
+                      <span>Отдаленные регионы: 7-14 дней</span>
+                    </li>
               </ul>
-              <p className="text-sm text-gray-600 mt-2">
-                Сроки доставки: 2-7 рабочих дней в зависимости от региона.
-              </p>
+                </div>
+              </div>
             </div>
             
-            <div className="mb-6">
-              <h4 className="font-semibold mb-2">Способы оплаты:</h4>
-              <ul className="list-disc pl-6">
-                <li>Онлайн-оплата через YooMoney</li>
-                <li>Прямой перевод по реквизитам (с подтверждением платежа)</li>
+            <div className="bg-gray-50 p-4 rounded-lg">
+              <h3 className="font-medium text-lg mb-3">Способы оплаты</h3>
+              
+              <div className="space-y-4">
+                <div>
+                  <p className="font-medium">Онлайн-оплата:</p>
+                  <ul className="mt-2 space-y-2 text-sm">
+                    <li className="flex items-start">
+                      <CreditCard className="h-4 w-4 text-primary mt-0.5 mr-2 flex-shrink-0" />
+                      <span>Оплата банковской картой через ЮMoney</span>
+                    </li>
               </ul>
             </div>
             
             <div>
-              <h4 className="font-semibold mb-2">Дополнительные услуги:</h4>
-              <ul className="list-disc pl-6">
-                <li>Передержка растений до весны</li>
-                <li>Утепление посылки в холодное время года</li>
+                  <p className="font-medium">Прямой перевод:</p>
+                  <ul className="mt-2 space-y-2 text-sm">
+                    <li className="flex items-start">
+                      <QrCode className="h-4 w-4 text-primary mt-0.5 mr-2 flex-shrink-0" />
+                      <span>Перевод по QR-коду или по реквизитам карты</span>
+                    </li>
               </ul>
-              <p className="text-sm text-gray-600 mt-2">
-                Подробности о доставке и оплате можно узнать в нашем <a href="https://telegra.ph/CHasto-zadavaemye-voprosy-o-Dzhunglevom-bote-i-zakupke-07-15" className="text-primary hover:underline" target="_blank" rel="noreferrer">FAQ</a>.
-              </p>
+                </div>
+              </div>
             </div>
           </div>
         </TabsContent>

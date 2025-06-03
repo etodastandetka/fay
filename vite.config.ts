@@ -30,6 +30,7 @@ export default defineConfig({
   },
   root: path.resolve(__dirname, "client"),
   build: {
+<<<<<<< HEAD
   outDir: path.resolve(__dirname, "dist/static"),
   emptyOutDir: true,
   rollupOptions: {
@@ -41,3 +42,16 @@ export default defineConfig({
   }
 }
 });
+=======
+    outDir: path.resolve(import.meta.dirname, "dist"),
+    emptyOutDir: true,
+    assetsDir: 'assets',
+    rollupOptions: {
+      output: {
+        assetFileNames: 'assets/[name]-[hash][extname]',
+        entryFileNames: 'assets/[name]-[hash].js',
+      },
+    },
+  },
+});
+>>>>>>> 53fa0d5 (Исправления кода и ошибок с импортами)

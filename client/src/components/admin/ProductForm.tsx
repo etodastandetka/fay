@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertProductSchema, Product } from "@shared/schema";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { z } from "zod";
@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Upload, X, Plus } from "lucide-react";
+import { Upload, X, Plus, Check } from "lucide-react";
 import {
   Form,
   FormControl,
@@ -28,6 +28,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from "@/components/ui/command";
 
 // Расширяем схему с дополнительной валидацией
 const productFormSchema = insertProductSchema.extend({
@@ -54,6 +60,23 @@ export default function ProductForm({ product, onSuccess, onCancel }: ProductFor
   const { toast } = useToast();
   const [imageUrls, setImageUrls] = useState<string[]>(product?.images || []);
   const [newImageUrl, setNewImageUrl] = useState("");
+  const [newCategory, setNewCategory] = useState("");
+  const [openCategoryPopover, setOpenCategoryPopover] = useState(false);
+  
+  // Загрузка списка категорий с сервера
+  const { data: categories = [] } = useQuery<string[]>({
+    queryKey: ["/api/categories"],
+    queryFn: async () => {
+      try {
+        const res = await fetch("/api/categories");
+        if (!res.ok) throw new Error("Failed to fetch categories");
+        return res.json();
+      } catch (error) {
+        console.error("Error fetching categories:", error);
+        return [];
+      }
+    }
+  });
   
   // Настройка формы с начальными данными из переданного товара или значениями по умолчанию
   const form = useForm<ProductFormValues>({
@@ -76,16 +99,28 @@ export default function ProductForm({ product, onSuccess, onCancel }: ProductFor
   // Мутация для создания нового товара
   const createProductMutation = useMutation({
     mutationFn: async (data: ProductFormValues) => {
-      // Добавляем изображения в данные
+      // Преобразуем данные для отправки на сервер
       const productData = {
         ...data,
-        images: imageUrls,
+        images: imageUrls.length > 0 ? imageUrls : [], // Обеспечиваем, что это массив
+        price: parseFloat(data.price), // Преобразуем в число
+        originalPrice: data.originalPrice ? parseFloat(data.originalPrice) : undefined,
+        quantity: parseInt(data.quantity),
+        deliveryCost: data.deliveryCost ? parseFloat(data.deliveryCost) : undefined,
       };
       
-      await apiRequest("POST", "/api/products", productData);
+      console.log("Sending product data:", productData); // Для отладки
+      
+      const response = await apiRequest("POST", "/api/products", productData);
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Failed to create product");
+      }
+      return await response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/categories"] });
       toast({
         title: "Товар создан",
         description: "Новый товар успешно добавлен в каталог"
@@ -93,9 +128,10 @@ export default function ProductForm({ product, onSuccess, onCancel }: ProductFor
       onSuccess();
     },
     onError: (error: Error) => {
+      console.error("Error creating product:", error);
       toast({
-        title: "Ошибка создания",
-        description: error.message,
+        title: "Ошибка создания товара",
+        description: error.message || "Не удалось создать товар. Проверьте данные и попробуйте снова.",
         variant: "destructive"
       });
     }
@@ -104,16 +140,28 @@ export default function ProductForm({ product, onSuccess, onCancel }: ProductFor
   // Мутация для обновления существующего товара
   const updateProductMutation = useMutation({
     mutationFn: async (data: { id: number, productData: ProductFormValues }) => {
-      // Добавляем изображения в данные
+      // Преобразуем данные для отправки на сервер
       const productData = {
         ...data.productData,
-        images: imageUrls,
+        images: imageUrls.length > 0 ? imageUrls : [], // Обеспечиваем, что это массив
+        price: parseFloat(data.productData.price), // Преобразуем в число
+        originalPrice: data.productData.originalPrice ? parseFloat(data.productData.originalPrice) : undefined,
+        quantity: parseInt(data.productData.quantity),
+        deliveryCost: data.productData.deliveryCost ? parseFloat(data.productData.deliveryCost) : undefined,
       };
       
-      await apiRequest("PUT", `/api/products/${data.id}`, productData);
+      console.log("Updating product data:", productData); // Для отладки
+      
+      const response = await apiRequest("PUT", `/api/products/${data.id}`, productData);
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Failed to update product");
+      }
+      return await response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/categories"] });
       toast({
         title: "Товар обновлен",
         description: "Товар успешно обновлен"
@@ -128,6 +176,14 @@ export default function ProductForm({ product, onSuccess, onCancel }: ProductFor
       });
     }
   });
+  
+  // Обработчик добавления новой категории
+  const handleAddCategory = () => {
+    if (newCategory && !categories.includes(newCategory)) {
+      form.setValue("category", newCategory);
+      setOpenCategoryPopover(false);
+    }
+  };
   
   // Обработчик отправки формы
   function onSubmit(values: ProductFormValues) {
@@ -197,28 +253,77 @@ export default function ProductForm({ product, onSuccess, onCancel }: ProductFor
               control={form.control}
               name="category"
               render={({ field }) => (
-                <FormItem>
+                <FormItem className="flex flex-col">
                   <FormLabel>Категория</FormLabel>
-                  <Select 
-                    onValueChange={field.onChange} 
-                    defaultValue={field.value}
-                  >
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Выберите категорию" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="Комнатные растения">Комнатные растения</SelectItem>
-                      <SelectItem value="Суккуленты">Суккуленты</SelectItem>
-                      <SelectItem value="Кактусы">Кактусы</SelectItem>
-                      <SelectItem value="Папоротники">Папоротники</SelectItem>
-                      <SelectItem value="Орхидеи">Орхидеи</SelectItem>
-                      <SelectItem value="Семена и рассада">Семена и рассада</SelectItem>
-                      <SelectItem value="Аксессуары">Аксессуары</SelectItem>
-                      <SelectItem value="Грунты и удобрения">Грунты и удобрения</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <Popover open={openCategoryPopover} onOpenChange={setOpenCategoryPopover}>
+                    <PopoverTrigger asChild>
+                      <FormControl>
+                        <Button
+                          variant="outline"
+                          role="combobox"
+                          aria-expanded={openCategoryPopover}
+                          className="w-full justify-between"
+                        >
+                          {field.value
+                            ? field.value
+                            : "Выберите категорию или создайте новую"}
+                          <div className="opacity-50 shrink-0">▼</div>
+                        </Button>
+                      </FormControl>
+                    </PopoverTrigger>
+                    <PopoverContent className="p-0" align="start" alignOffset={-8} side="bottom" sideOffset={8}>
+                      <Command>
+                        <CommandInput 
+                          placeholder="Поиск или создание категории..." 
+                          value={newCategory}
+                          onValueChange={setNewCategory}
+                        />
+                        {categories.length > 0 && (
+                          <CommandEmpty>
+                            <div className="flex flex-col gap-2 p-2">
+                              <p className="text-sm text-gray-500">Категория не найдена.</p>
+                              <Button 
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="w-full"
+                                onClick={handleAddCategory}
+                              >
+                                <Plus className="w-4 h-4 mr-2" />
+                                Создать "{newCategory}"
+                              </Button>
+                            </div>
+                          </CommandEmpty>
+                        )}
+                        <CommandGroup>
+                          {categories.map((category) => (
+                            <CommandItem
+                              value={category}
+                              key={category}
+                              onSelect={() => {
+                                form.setValue("category", category);
+                                setOpenCategoryPopover(false);
+                              }}
+                            >
+                              <Check
+                                className={`mr-2 h-4 w-4 ${field.value === category ? "opacity-100" : "opacity-0"}`}
+                              />
+                              {category}
+                            </CommandItem>
+                          ))}
+                          {newCategory && !categories.includes(newCategory) && (
+                            <CommandItem
+                              value={newCategory}
+                              onSelect={handleAddCategory}
+                            >
+                              <Plus className="mr-2 h-4 w-4" />
+                              Создать "{newCategory}"
+                            </CommandItem>
+                          )}
+                        </CommandGroup>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
                   <FormMessage />
                 </FormItem>
               )}
@@ -268,6 +373,29 @@ export default function ProductForm({ product, onSuccess, onCancel }: ProductFor
                 )}
               />
             </div>
+            
+            <FormField
+              control={form.control}
+              name="deliveryCost"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Стоимость доставки (₽)</FormLabel>
+                  <FormControl>
+                    <Input 
+                      type="number" 
+                      min="0" 
+                      step="50" 
+                      placeholder="Стоимость доставки"
+                      {...field} 
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    Индивидуальная стоимость доставки для данного товара
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
             
             <FormField
               control={form.control}
@@ -444,7 +572,12 @@ export default function ProductForm({ product, onSuccess, onCancel }: ProductFor
             type="submit"
             disabled={createProductMutation.isPending || updateProductMutation.isPending}
           >
-            {product ? "Сохранить изменения" : "Создать товар"}
+            {createProductMutation.isPending || updateProductMutation.isPending ? (
+              <span className="flex items-center">
+                <Upload className="w-4 h-4 mr-2 animate-spin" />
+                Сохранение...
+              </span>
+            ) : product ? "Обновить товар" : "Создать товар"}
           </Button>
         </div>
       </form>

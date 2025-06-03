@@ -1,9 +1,9 @@
 import { useState, useEffect } from "react";
 import { useLocation, Link } from "wouter";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest } from "@/lib/queryClient";
 import { User, Order, Review } from "@shared/schema";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
@@ -50,6 +50,16 @@ import {
   Eye
 } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogClose,
+} from "@/components/ui/dialog";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 // Profile update schema
 const profileSchema = z.object({
@@ -73,13 +83,60 @@ const passwordSchema = z.object({
 type ProfileFormValues = z.infer<typeof profileSchema>;
 type PasswordFormValues = z.infer<typeof passwordSchema>;
 
+// Define type for profile update
+type UpdateProfile = {
+  fullName?: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+  username?: string;
+};
+
 export default function ProfilePage() {
   const [, setLocation] = useLocation();
   const [location] = useLocation();
   const { toast } = useToast();
-  const { user, logoutMutation } = useAuth();
+  const { user, logoutMutation, refreshUserData, setUser } = useAuth();
   const [activeTab, setActiveTab] = useState("profile");
   const [isEditing, setIsEditing] = useState(false);
+  const [selectedOrder, setSelectedOrder] = useState<any>(null);
+  const [showOrderDetails, setShowOrderDetails] = useState(false);
+  const queryClient = useQueryClient();
+
+  // Profile form
+  const profileForm = useForm<ProfileFormValues>({
+    resolver: zodResolver(profileSchema),
+    defaultValues: {
+      fullName: "",
+      email: "",
+      phone: "",
+      address: "",
+      username: "",
+    },
+  });
+
+  // Password form
+  const passwordForm = useForm<PasswordFormValues>({
+    resolver: zodResolver(passwordSchema),
+    defaultValues: {
+      oldPassword: "",
+      password: "",
+      confirmPassword: "",
+    },
+  });
+
+  // Reset form when user data changes
+  useEffect(() => {
+    if (user) {
+      profileForm.reset({
+        fullName: user.fullName || "",
+        email: user.email || "",
+        phone: user.phone || "",
+        address: user.address || "",
+        username: user.username || "",
+      });
+    }
+  }, [user]);
   
   // Get tab from URL if present
   useEffect(() => {
@@ -99,8 +156,30 @@ export default function ProfilePage() {
         description: "Пожалуйста, войдите в аккаунт для доступа к профилю",
         variant: "destructive"
       });
+    } else {
+      // При монтировании компонента обновляем значения формы
+      profileForm.reset({
+        fullName: user?.fullName || "",
+        email: user?.email || "",
+        phone: user?.phone || "",
+        address: user?.address || "",
+        username: user?.username || "",
+      });
     }
-  }, [user, setLocation, toast]);
+  }, [user, setLocation, toast, profileForm]);
+  
+  // Обновляем форму при изменении пользователя
+  useEffect(() => {
+    if (user) {
+      profileForm.reset({
+        fullName: user?.fullName || "",
+        email: user?.email || "",
+        phone: user?.phone || "",
+        address: user?.address || "",
+        username: user?.username || "",
+      });
+    }
+  }, [user, profileForm]);
   
   // Fetch user orders
   const { data: orders = [], isLoading: ordersLoading } = useQuery<Order[]>({
@@ -135,57 +214,89 @@ export default function ProfilePage() {
     enabled: !!user && activeTab === "notifications",
   });
   
-  // Profile form
-  const profileForm = useForm<ProfileFormValues>({
-    resolver: zodResolver(profileSchema),
-    defaultValues: {
-      fullName: user?.fullName || "",
-      email: user?.email || "",
-      phone: user?.phone || "",
-      address: user?.address || "",
-      username: user?.username || "",
-    },
-  });
-  
-  // Password form
-  const passwordForm = useForm<PasswordFormValues>({
-    resolver: zodResolver(passwordSchema),
-    defaultValues: {
-      oldPassword: "",
-      password: "",
-      confirmPassword: "",
-    },
-  });
-  
   // Update profile mutation
   const updateProfileMutation = useMutation({
-    mutationFn: async (data: Partial<User>) => {
-      if (!user) throw new Error("Пользователь не авторизован");
-      const res = await apiRequest("PUT", `/api/users/${user.id}`, data);
-      return res.json();
-    },
-    onSuccess: (updatedUser) => {
-      queryClient.setQueryData(["/api/user"], updatedUser);
-      setIsEditing(false);
-      toast({
-        title: "Профиль обновлен",
-        description: "Ваши данные успешно обновлены",
+  mutationFn: async (data: UpdateProfile) => {
+    if (!user || !user.id) {
+      throw new Error("Пользователь не авторизован или ID не определен");
+    }
+
+    console.log("Отправка запроса на обновление профиля:", data);
+    
+    try {
+      const url = `/api/users/${user.id}`;
+      console.log("URL запроса:", url);
+      
+      const response = await fetch(url, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(data),
+        credentials: 'include'
       });
-    },
-    onError: (error) => {
-      toast({
-        title: "Ошибка",
-        description: error.message,
-        variant: "destructive",
-      });
-    },
-  });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Ошибка при обновлении профиля");
+      }
+      
+      const result = await response.json();
+      console.log("Ответ сервера на обновление профиля:", result);
+      return result;
+    } catch (error) {
+      console.error("Ошибка при обновлении профиля:", error);
+      throw error;
+    }
+  },
+  onSuccess: (updatedUser) => {
+    console.log("Профиль успешно обновлен:", updatedUser);
+    
+    // 1. Обновляем данные в React Query кеше
+    queryClient.setQueryData(['/api/auth/user'], { user: updatedUser });
+    
+    // 2. Обновляем глобальное состояние пользователя
+    setUser(updatedUser);
+    
+    // 3. Принудительно обновляем данные с сервера
+    refreshUserData();
+    
+    // 4. Закрываем режим редактирования
+    setIsEditing(false);
+    
+    // 5. Показываем уведомление об успехе
+    toast({
+      title: "Профиль обновлен",
+      description: "Ваши данные успешно сохранены",
+      variant: "success",
+    });
+    
+    // 6. Инвалидируем связанные запросы
+    queryClient.invalidateQueries({
+      queryKey: ['user', user?.id],
+      exact: true
+    });
+  },
+  onError: (error: Error) => {
+    console.error("Ошибка при обновлении профиля:", error);
+    toast({
+      title: "Ошибка обновления профиля",
+      description: error.message,
+      variant: "destructive",
+    });
+  }
+});
   
   // Update password mutation
   const updatePasswordMutation = useMutation({
     mutationFn: async (data: { oldPassword: string; password: string }) => {
-      if (!user) throw new Error("Пользователь не авторизован");
+      if (!user || !user.id) throw new Error("Пользователь не авторизован");
+      console.log("Обновляем пароль для пользователя ID:", user.id);
       const res = await apiRequest("PUT", `/api/users/${user.id}`, data);
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.message || "Ошибка при обновлении пароля");
+      }
       return res.json();
     },
     onSuccess: () => {
@@ -221,7 +332,7 @@ export default function ProfilePage() {
   };
   
   // Format date
-  const formatDate = (dateStr: Date) => {
+  const formatDate = (dateStr: Date | string | null) => {
     if (!dateStr) return "Дата неизвестна";
     const date = new Date(dateStr);
     return new Intl.DateTimeFormat('ru-RU', {
@@ -240,7 +351,7 @@ export default function ProfilePage() {
   };
   
   // Get order status badge
-  const getOrderStatusBadge = (status: string) => {
+  const getOrderStatusBadge = (status: string | null) => {
     if (!status) return <Badge variant="outline">Статус неизвестен</Badge>;
     
     switch (status) {
@@ -263,10 +374,36 @@ export default function ProfilePage() {
     }
   };
   
+  const handleViewOrder = (order: any) => {
+    setSelectedOrder(order);
+    setShowOrderDetails(true);
+  };
+  
+  // Add this function to get formatted status badge
+  const getStatusBadge = (status: string) => {
+    const statusMap: Record<string, { label: string, className: string }> = {
+      "pending": { label: "В ожидании", className: "bg-amber-100 text-amber-800" },
+      "pending_payment": { label: "Ожидает оплаты", className: "bg-blue-100 text-blue-800" },
+      "paid": { label: "Оплачен", className: "bg-green-100 text-green-800" },
+      "shipped": { label: "Отправлен", className: "bg-purple-100 text-purple-800" },
+      "delivered": { label: "Доставлен", className: "bg-gray-100 text-gray-800" },
+      "processing": { label: "В обработке", className: "bg-indigo-100 text-indigo-800" },
+      "canceled": { label: "Отменен", className: "bg-red-100 text-red-800" },
+    };
+    
+    const statusInfo = statusMap[status] || { label: status, className: "bg-gray-100 text-gray-800" };
+    
+    return (
+      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusInfo.className}`}>
+        {statusInfo.label}
+      </span>
+    );
+  };
+  
   if (!user) {
     return null; // Will redirect in useEffect
   }
-  
+
   return (
     <div className="container mx-auto px-4 py-8 max-w-6xl">
       <div className="flex flex-col md:flex-row gap-6">
@@ -501,7 +638,7 @@ export default function ProfilePage() {
                       <Loader2 className="h-8 w-8 mx-auto animate-spin text-primary" />
                       <p className="mt-2 text-sm text-muted-foreground">Загрузка заказов...</p>
                     </div>
-                  ) : orders.length > 0 ? (
+                  ) : orders && orders.length > 0 ? (
                     <div className="space-y-6">
                       {orders.map((order) => (
                         <div key={order.id} className="border rounded-lg p-4">
@@ -525,7 +662,11 @@ export default function ProfilePage() {
                             </div>
                           </div>
                           <div className="flex items-center">
-                            <Button variant="ghost" size="sm">
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              onClick={() => handleViewOrder(order)}
+                            >
                               <Eye className="h-4 w-4 mr-2" />
                               Детали
                             </Button>
@@ -775,6 +916,149 @@ export default function ProfilePage() {
           </Tabs>
         </div>
       </div>
+      
+      <Dialog open={showOrderDetails} onOpenChange={setShowOrderDetails}>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>Детали заказа</DialogTitle>
+            <DialogDescription>
+              {selectedOrder ? `Заказ #${selectedOrder.id} от ${formatDate(selectedOrder.createdAt)}` : ""}
+            </DialogDescription>
+          </DialogHeader>
+          
+          {selectedOrder && (
+            <Tabs defaultValue="details" className="w-full">
+              <TabsList className="grid grid-cols-2 mb-4">
+                <TabsTrigger value="details">Основная информация</TabsTrigger>
+                <TabsTrigger value="items">Товары</TabsTrigger>
+              </TabsList>
+              
+              <TabsContent value="details" className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <h3 className="font-medium">Информация о заказе</h3>
+                    <p><span className="text-gray-500">Статус:</span> {getStatusBadge(selectedOrder.orderStatus)}</p>
+                    <p><span className="text-gray-500">Сумма заказа:</span> {formatPrice(selectedOrder.totalAmount)} ₽</p>
+                    <p><span className="text-gray-500">Тип доставки:</span> {selectedOrder.deliveryType === "cdek" ? "СДЭК" : "Почта России"}</p>
+                    <p><span className="text-gray-500">Скорость доставки:</span> {selectedOrder.deliverySpeed === "express" ? "Экспресс" : "Стандарт"}</p>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <h3 className="font-medium">Информация о получателе</h3>
+                    <p><span className="text-gray-500">Имя:</span> {selectedOrder.fullName}</p>
+                    <p><span className="text-gray-500">Телефон:</span> {selectedOrder.phone}</p>
+                    <p><span className="text-gray-500">Адрес:</span> {selectedOrder.address}</p>
+                  </div>
+                </div>
+              </TabsContent>
+              
+              <TabsContent value="items" className="space-y-4">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Товар</TableHead>
+                      <TableHead>Цена</TableHead>
+                      <TableHead>Количество</TableHead>
+                      <TableHead>Сумма</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {(() => {
+                      // Безопасная функция извлечения товаров из заказа
+                      const extractOrderItems = () => {
+                        try {
+                          // Если у нас уже есть массив товаров, используем его
+                          if (Array.isArray(selectedOrder.items) && selectedOrder.items.length > 0) {
+                            return selectedOrder.items;
+                          }
+                          
+                          // Если данные в виде строки JSON, пытаемся распарсить
+                          if (typeof selectedOrder.items === 'string' && selectedOrder.items.trim()) {
+                            try {
+                              const parsedItems = JSON.parse(selectedOrder.items);
+                              
+                              // Проверяем, что результат - массив
+                              if (Array.isArray(parsedItems) && parsedItems.length > 0) {
+                                return parsedItems;
+                              }
+                            } catch (parseError) {
+                              console.error("Ошибка при парсинге товаров заказа:", parseError);
+                              
+                              // Проверяем случай двойного экранирования JSON
+                              if (selectedOrder.items.startsWith('"[') && selectedOrder.items.endsWith(']"')) {
+                                try {
+                                  const unescaped = JSON.parse(selectedOrder.items);
+                                  const nestedItems = JSON.parse(unescaped);
+                                  
+                                  if (Array.isArray(nestedItems) && nestedItems.length > 0) {
+                                    return nestedItems;
+                                  }
+                                } catch (nestedError) {
+                                  console.error("Ошибка при парсинге вложенного JSON:", nestedError);
+                                }
+                              }
+                            }
+                          }
+                          
+                          // Если не удалось получить данные, но у нас есть информация о сумме заказа,
+                          // создаем фиктивный элемент
+                          if (selectedOrder.totalAmount && parseFloat(selectedOrder.totalAmount) > 0) {
+                            return [{
+                              id: 0,
+                              productName: "Товар из заказа",
+                              name: "Товар из заказа",
+                              price: selectedOrder.totalAmount,
+                              quantity: 1
+                            }];
+                          }
+                          
+                          // Если не удалось получить данные, возвращаем пустой массив
+                          return [];
+                        } catch (error) {
+                          console.error("Непредвиденная ошибка при извлечении товаров:", error);
+                          return [];
+                        }
+                      };
+                      
+                      // Получаем товары из заказа
+                      const orderItems = extractOrderItems();
+                      
+                      // Если есть товары, отображаем их
+                      if (orderItems.length > 0) {
+                        return orderItems.map((item: any, index: number) => (
+                          <TableRow key={index}>
+                            <TableCell>
+                              {item.productName || item.name || 'Товар без названия'}
+                            </TableCell>
+                            <TableCell>{formatPrice(item.price || 0)} ₽</TableCell>
+                            <TableCell>{item.quantity || 1}</TableCell>
+                            <TableCell>{formatPrice(parseFloat(String(item.price || 0)) * (item.quantity || 1))} ₽</TableCell>
+                          </TableRow>
+                        ));
+                      }
+                      
+                      // Если товаров нет, показываем сообщение об ошибке
+                      return (
+                        <TableRow>
+                          <TableCell colSpan={4} className="text-center py-4 text-gray-500">
+                            Нет данных о товарах
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })()}
+                  </TableBody>
+                </Table>
+              </TabsContent>
+            </Tabs>
+          )}
+          
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline">Закрыть</Button>
+            </DialogClose>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
-}
+  }

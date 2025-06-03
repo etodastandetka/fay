@@ -68,8 +68,10 @@ export default function CatalogPage() {
     if (discount) params.append("labels", "Скидка");
     
     if (searchTerm) params.append("search", searchTerm);
-    if (minPrice !== undefined) params.append("minPrice", minPrice.toString());
-    if (maxPrice !== undefined) params.append("maxPrice", maxPrice.toString());
+    
+    // Добавляем фильтрацию по цене
+    if (priceRange[0] > 0) params.append("minPrice", priceRange[0].toString());
+    if (priceRange[1] < 10000) params.append("maxPrice", priceRange[1].toString());
     
     return params.toString();
   };
@@ -115,7 +117,11 @@ export default function CatalogPage() {
   };
   
   const applyPriceFilter = () => {
-    updateUrlParams({ minPrice: priceRange[0].toString(), maxPrice: priceRange[1].toString() });
+    // Обновляем URL и запускаем запрос с новыми параметрами цены
+    updateUrlParams({ 
+      minPrice: priceRange[0] > 0 ? priceRange[0].toString() : undefined, 
+      maxPrice: priceRange[1] < 10000 ? priceRange[1].toString() : undefined 
+    });
   };
   
   const updateUrlParams = (newParams: Record<string, string | undefined>) => {

@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Search, Edit, CreditCard, User as UserIcon } from "lucide-react";
+import { Search, Edit, CreditCard, User as UserIcon, FileDown } from "lucide-react";
 import { 
   Dialog,
   DialogContent,
@@ -141,20 +141,67 @@ export default function UsersList() {
     (user.fullName && user.fullName.toLowerCase().includes(searchQuery.toLowerCase()))
   );
   
+  // Функция для экспорта пользователей в Excel
+  const exportToExcel = () => {
+    if (!users || users.length === 0) {
+      toast({
+        title: "Нет данных для экспорта",
+        description: "Список пользователей пуст",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      // Вместо создания CSV на клиенте, скачиваем файл с сервера
+      const exportUrl = `${import.meta.env.VITE_API_BASE_URL || ''}/api/export/users`;
+      
+      // Создаем ссылку для скачивания
+      const link = document.createElement('a');
+      link.href = exportUrl;
+      link.download = `users_export_${new Date().toISOString().slice(0,10)}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      toast({
+        title: "Экспорт успешно выполнен",
+        description: "Файл со списком пользователей скачивается"
+      });
+    } catch (error) {
+      console.error("Ошибка при экспорте в Excel:", error);
+      toast({
+        title: "Ошибка экспорта",
+        description: "Не удалось экспортировать данные",
+        variant: "destructive"
+      });
+    }
+  };
+  
   return (
     <div className="p-6">
       <h2 className="text-2xl font-bold mb-6">Управление пользователями</h2>
       
       <Card className="mb-6">
         <div className="p-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-3 text-gray-400 w-4 h-4" />
-            <Input
-              placeholder="Поиск пользователей по имени, email или профилю"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10"
-            />
+          <div className="flex items-center justify-between gap-4">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-3 text-gray-400 w-4 h-4" />
+              <Input
+                placeholder="Поиск пользователей по имени, email или профилю"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+            <Button 
+              onClick={exportToExcel} 
+              className="bg-green-600 hover:bg-green-700 text-white"
+              disabled={isLoading || !users || users.length === 0}
+            >
+              <FileDown className="mr-2 h-4 w-4" />
+              Экспорт в CSV
+            </Button>
           </div>
         </div>
       </Card>

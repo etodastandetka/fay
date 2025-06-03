@@ -51,7 +51,7 @@ export const insertProductSchema = createInsertSchema(products).omit({
 // Order schema
 export const orders = pgTable("orders", {
   id: serial("id").primaryKey(),
-  userId: integer("user_id").notNull(),
+  userId: text("user_id").notNull(),
   items: jsonb("items").notNull(),
   totalAmount: decimal("total_amount", { precision: 10, scale: 2 }).notNull(),
   deliveryAmount: decimal("delivery_amount", { precision: 10, scale: 2 }).notNull(),

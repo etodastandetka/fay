@@ -15,13 +15,21 @@ import { Sprout, User, Mail, Key, Phone, Home, AtSign, Instagram, Facebook, Twit
 
 // Login schema
 const loginSchema = z.object({
-  username: z.string().min(1, "Введите имя пользователя или email"),
+  email: z.string().email("Введите корректный email"),
   password: z.string().min(1, "Введите пароль"),
 });
 
 // Registration schema (extending the insert schema)
-const registerSchema = insertUserSchema.extend({
+const registerSchema = z.object({
+  username: z.string().min(1, "Введите имя пользователя"),
+  email: z.string().email("Введите корректный email"),
+  password: z.string().min(8, "Пароль должен быть не менее 8 символов"),
   confirmPassword: z.string().min(1, "Подтвердите пароль"),
+  fullName: z.string().min(1, "Введите ваше полное имя"),
+  phone: z.string().optional(),
+  address: z.string().optional(),
+  socialType: z.string().optional(),
+  socialUser: z.string().optional(),
 }).refine((data) => data.password === data.confirmPassword, {
   message: "Пароли не совпадают",
   path: ["confirmPassword"],
@@ -46,7 +54,7 @@ export default function AuthPage() {
   const loginForm = useForm<LoginValues>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
-      username: "",
+      email: "",
       password: "",
     },
   });
@@ -63,18 +71,31 @@ export default function AuthPage() {
       phone: "",
       address: "",
       socialType: "Instagram",
-      socialNetwork: "",
+      socialUser: "",
     },
   });
 
+  // Login function
   const onLoginSubmit = (data: LoginValues) => {
     loginMutation.mutate(data);
   };
 
+  // Register function
   const onRegisterSubmit = (data: RegisterValues) => {
     // Remove confirmPassword as it's not part of the API schema
-    const { confirmPassword, ...registerData } = data;
-    registerMutation.mutate(registerData);
+    const { confirmPassword, socialUser, ...registerData } = data;
+    
+    // Ensure all required fields are non-empty
+    const userData = {
+      ...registerData,
+      username: registerData.username,
+      phone: registerData.phone || '',
+      address: registerData.address || '',
+      fullName: registerData.fullName
+    };
+    
+    console.log("Регистрационные данные:", userData);
+    registerMutation.mutate(userData);
   };
 
   return (
@@ -102,17 +123,17 @@ export default function AuthPage() {
                       <form onSubmit={loginForm.handleSubmit(onLoginSubmit)} className="space-y-4">
                         <FormField
                           control={loginForm.control}
-                          name="username"
+                          name="email"
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel>Имя пользователя или Email</FormLabel>
+                              <FormLabel>Email</FormLabel>
                               <FormControl>
                                 <div className="relative">
-                                  <User className="absolute top-3 left-3 h-5 w-5 text-gray-400" />
+                                  <Mail className="absolute top-3 left-3 h-5 w-5 text-gray-400" />
                                   <Input
                                     {...field}
                                     className="pl-10 form-input"
-                                    placeholder="Введите имя пользователя или email"
+                                    placeholder="Введите email"
                                   />
                                 </div>
                               </FormControl>
@@ -332,7 +353,7 @@ export default function AuthPage() {
                           />
                           <FormField
                             control={registerForm.control}
-                            name="socialNetwork"
+                            name="socialUser"
                             render={({ field }) => (
                               <FormItem>
                                 <FormLabel>Аккаунт в соцсети</FormLabel>

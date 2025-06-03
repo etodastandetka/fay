@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 import { ProtectedRoute } from "@/lib/protected-route";
+import ScrollToTop from "@/components/ScrollToTop";
 
 // Pages
 import HomePage from "@/pages/home-page";
@@ -26,6 +27,7 @@ function Router() {
   return (
     <div className="flex flex-col min-h-screen pb-16 md:pb-0">
       <Header />
+      <ScrollToTop />
       <main className="flex-grow">
         <Switch>
           <Route path="/" component={HomePage} />

@@ -1,5 +1,6 @@
 import { Link } from "wouter";
 import { Sprout, Mail, Clock, MessageCircle } from "lucide-react";
+import ExternalLink from "./ExternalLink";
 
 function Footer() {
   return (
@@ -14,15 +15,15 @@ function Footer() {
             </h3>
             <p className="text-gray-300 mb-4">Превращаем ваш дом в уютные джунгли с 2021 года</p>
             <div className="flex space-x-3">
-              <a href="https://t.me/helen_heinlein" className="text-white hover:text-secondary transition-colors">
+              <ExternalLink href="https://t.me/helen_heinlein" className="text-white hover:text-secondary transition-colors">
                 <i className="ri-telegram-fill text-xl"></i>
-              </a>
-              <a href="https://instagram.com/jungle_plants" className="text-white hover:text-secondary transition-colors">
+              </ExternalLink>
+              <ExternalLink href="https://instagram.com/jungle_plants" className="text-white hover:text-secondary transition-colors">
                 <i className="ri-instagram-fill text-xl"></i>
-              </a>
-              <a href="mailto:info@jungleplants.ru" className="text-white hover:text-secondary transition-colors">
+              </ExternalLink>
+              <ExternalLink href="mailto:info@jungleplants.ru" className="text-white hover:text-secondary transition-colors">
                 <i className="ri-mail-fill text-xl"></i>
-              </a>
+              </ExternalLink>
             </div>
           </div>
           
@@ -46,14 +47,14 @@ function Footer() {
                 </Link>
               </li>
               <li>
-                <a href="https://telegra.ph/CHasto-zadavaemye-voprosy-o-Dzhunglevom-bote-i-zakupke-07-15" target="_blank" rel="noreferrer" className="text-gray-300 hover:text-white transition-colors">
+                <ExternalLink href="https://telegra.ph/CHasto-zadavaemye-voprosy-o-Dzhunglevom-bote-i-zakupke-07-15" className="text-gray-300 hover:text-white transition-colors">
                   FAQ
-                </a>
+                </ExternalLink>
               </li>
               <li>
-                <a href="https://t.me/junglefeedback" target="_blank" rel="noreferrer" className="text-gray-300 hover:text-white transition-colors">
+                <ExternalLink href="https://t.me/junglefeedback" className="text-gray-300 hover:text-white transition-colors">
                   Отзывы
-                </a>
+                </ExternalLink>
               </li>
             </ul>
           </div>
@@ -96,15 +97,15 @@ function Footer() {
             <ul className="space-y-2">
               <li className="flex items-center">
                 <MessageCircle className="h-5 w-5 mr-2" />
-                <a href="https://t.me/helen_heinlein" target="_blank" rel="noreferrer" className="text-gray-300 hover:text-white transition-colors">
+                <ExternalLink href="https://t.me/helen_heinlein" className="text-gray-300 hover:text-white transition-colors">
                   @helen_heinlein
-                </a>
+                </ExternalLink>
               </li>
               <li className="flex items-center">
                 <Mail className="h-5 w-5 mr-2" />
-                <a href="mailto:info@jungleplants.ru" className="text-gray-300 hover:text-white transition-colors">
+                <ExternalLink href="mailto:info@jungleplants.ru" className="text-gray-300 hover:text-white transition-colors">
                   info@jungleplants.ru
-                </a>
+                </ExternalLink>
               </li>
               <li className="flex items-center">
                 <Clock className="h-5 w-5 mr-2" />

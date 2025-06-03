@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
+import ExternalLink from "@/components/ExternalLink";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -69,9 +70,9 @@ function Header() {
           <Link href="/faq" className={`hover:text-primary transition-colors ${location === "/faq" ? "text-primary" : ""}`}>
             Оплата
           </Link>
-          <Link href="https://t.me/junglefeedback" target="_blank" className="hover:text-primary transition-colors">
+          <ExternalLink href="https://t.me/junglefeedback" className="hover:text-primary transition-colors">
             Отзывы
-          </Link>
+          </ExternalLink>
           <Link href="/faq" className={`hover:text-primary transition-colors ${location === "/faq" ? "text-primary" : ""}`}>
             FAQ
           </Link>
@@ -140,9 +141,9 @@ function Header() {
             <Link href="/faq" onClick={closeMobileMenu} className="py-2 hover:text-primary transition-colors">
               Оплата
             </Link>
-            <Link href="https://t.me/junglefeedback" target="_blank" onClick={closeMobileMenu} className="py-2 hover:text-primary transition-colors">
+            <ExternalLink href="https://t.me/junglefeedback" onClick={closeMobileMenu} className="py-2 hover:text-primary transition-colors">
               Отзывы
-            </Link>
+            </ExternalLink>
             <Link href="/faq" onClick={closeMobileMenu} className="py-2 hover:text-primary transition-colors">
               FAQ
             </Link>

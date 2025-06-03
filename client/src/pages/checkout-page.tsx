@@ -1,13 +1,13 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { insertOrderSchema, InsertOrder, PaymentDetails } from "@shared/schema";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -67,11 +67,13 @@ type CheckoutFormValues = z.infer<typeof checkoutSchema>;
 export default function CheckoutPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user, refreshUserData } = useAuth();
   const [step, setStep] = useState<"shipping" | "payment" | "questions" | "success">("shipping");
   const [paymentProof, setPaymentProof] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [orderId, setOrderId] = useState<number | null>(null);
+  const [proofUploaded, setProofUploaded] = useState(false);
+  const queryClient = useQueryClient();
   
   // Redirect if not authenticated
   useEffect(() => {
@@ -150,7 +152,7 @@ export default function CheckoutPage() {
     return new Intl.NumberFormat('ru-RU').format(price);
   };
   
-  // Handle file upload
+  // Handle file change
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0]) {
       const file = event.target.files[0];
@@ -176,44 +178,16 @@ export default function CheckoutPage() {
       }
       
       setPaymentProof(file);
+      setProofUploaded(false);
+      
+      // Показать уведомление о успешном прикреплении файла
+      toast({
+        title: "Файл прикреплен",
+        description: "Чек успешно прикреплен к заказу. Нажмите 'Загрузить чек' для отправки.",
+        variant: "success"
+      });
     }
   };
-  
-  // Create order mutation
-  const createOrderMutation = useMutation({
-    mutationFn: async (data: InsertOrder) => {
-      const res = await apiRequest("POST", "/api/orders", data);
-      return res.json();
-    },
-    onSuccess: (data) => {
-      setOrderId(data.id);
-      
-      // If payment method is YooMoney or balance, go directly to success
-      const paymentMethod = form.getValues("paymentMethod");
-      if (paymentMethod === "yoomoney" || paymentMethod === "balance") {
-        setStep("success");
-        
-        // Clear cart
-        localStorage.setItem("cart", "[]");
-        queryClient.setQueryData(["/api/cart"], []);
-      } else {
-        // For direct transfer, go to questions step to upload proof
-        setStep("questions");
-      }
-      
-      toast({
-        title: "Заказ создан",
-        description: `Заказ #${data.id} успешно создан`,
-      });
-    },
-    onError: (error) => {
-      toast({
-        title: "Ошибка",
-        description: error.message,
-        variant: "destructive"
-      });
-    }
-  });
   
   // Upload payment proof mutation
   const uploadProofMutation = useMutation({
@@ -221,20 +195,72 @@ export default function CheckoutPage() {
       const formData = new FormData();
       formData.append("proof", file);
       
-      const res = await fetch(`/api/orders/${id}/payment-proof`, {
+      const res = await fetch(`${import.meta.env.VITE_API_BASE_URL || ''}/api/orders/${id}/payment-proof`, {
         method: "POST",
         body: formData,
         credentials: "include",
       });
       
       if (!res.ok) {
-        const errorText = await res.text();
-        throw new Error(errorText || "Failed to upload payment proof");
+        const errorData = await res.json().catch(() => null);
+        throw new Error(errorData?.message || "Ошибка загрузки подтверждения оплаты");
       }
       
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      // После успешной загрузки чека уведомляем пользователя и устанавливаем флаг
+      setProofUploaded(true);
+      
+      toast({
+        title: "Чек загружен",
+        description: "Чек успешно загружен! Теперь нажмите 'Завершить заказ' для завершения заказа",
+        variant: "success"
+      });
+      
+      setIsUploading(false);
+    },
+    onError: (error: Error) => {
+      setIsUploading(false);
+      toast({
+        title: "Ошибка загрузки",
+        description: error.message || "Произошла ошибка при загрузке файла",
+        variant: "destructive"
+      });
+    },
+    onSettled: () => {
+      setIsUploading(false);
+    }
+  });
+  
+  // Final complete order after proof upload
+  const completeOrderMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await fetch(`${import.meta.env.VITE_API_BASE_URL || ''}/api/orders/${id}/complete`, {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        }
+      });
+      
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => null);
+        throw new Error(errorData?.message || "Ошибка при завершении заказа");
+      }
+      
+      return res.json();
+    },
+    onSuccess: (data) => {
+      // После финализации заказа обновляем данные пользователя и статус заказа
+      queryClient.invalidateQueries({queryKey: ["/api/auth/user"]});
+      queryClient.invalidateQueries({queryKey: ["/api/user/orders"]});
+      queryClient.invalidateQueries({queryKey: ["/api/orders"]});
+      
+      // Явное обновление пользовательских данных для актуализации баланса
+      refreshUserData();
+      
+      // Четкий переход на страницу успешного оформления
       setStep("success");
       
       // Clear cart
@@ -242,13 +268,102 @@ export default function CheckoutPage() {
       queryClient.setQueryData(["/api/cart"], []);
       
       toast({
-        title: "Платеж подтвержден",
-        description: "Подтверждение платежа загружено и будет проверено администратором",
+        title: "Заказ завершен",
+        description: data.message || `Заказ #${orderId} успешно оформлен`,
+        variant: "success"
       });
     },
-    onError: (error) => {
+    onError: (error: Error) => {
       toast({
-        title: "Ошибка",
+        title: "Ошибка завершения заказа",
+        description: error.message,
+        variant: "destructive"
+      });
+    }
+  });
+  
+  // Create order mutation
+  const createOrderMutation = useMutation({
+    mutationFn: async (data: InsertOrder) => {
+      try {
+        // Перед созданием заказа обновим данные пользователя
+        await refreshUserData();
+        
+        const response = await apiRequest("POST", "/api/orders", data);
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => null);
+          throw new Error(errorData?.message || "Ошибка при создании заказа");
+        }
+        return response.json();
+      } catch (error) {
+        console.error("Ошибка при создании заказа:", error);
+        throw error;
+      }
+    },
+    onSuccess: (data) => {
+      // Сохраняем ID заказа
+      console.log("Заказ успешно создан:", data);
+      setOrderId(data.id);
+      
+      // If payment method is YooMoney or balance, go directly to success
+      const paymentMethod = form.getValues("paymentMethod");
+      if (paymentMethod === "yoomoney") {
+        setStep("success");
+        
+        // Clear cart
+        localStorage.setItem("cart", "[]");
+        queryClient.setQueryData(["/api/cart"], []);
+        
+        toast({
+          title: "Заказ оформлен",
+          description: `Заказ #${data.id} успешно оформлен и будет обработан после оплаты через ЮМани`,
+          variant: "success"
+        });
+      } else if (paymentMethod === "balance") {
+        // Обновление данных пользователя после оплаты с баланса
+        queryClient.invalidateQueries({queryKey: ["/api/auth/user"]});
+        queryClient.invalidateQueries({queryKey: ["/api/orders"]});
+        queryClient.invalidateQueries({queryKey: ["/api/user/orders"]});
+        
+        // Принудительное обновление данных пользователя с небольшой задержкой
+        setTimeout(async () => {
+          await refreshUserData();
+          
+          // Показываем уведомление с актуальным балансом
+          if (user) {
+            toast({
+              title: "Баланс обновлен",
+              description: `Ваш текущий баланс: ${formatPrice(parseFloat(user.balance || "0"))} ₽`,
+              variant: "default"
+            });
+          }
+        }, 500);
+        
+        setStep("success");
+        
+        // Clear cart
+        localStorage.setItem("cart", "[]");
+        queryClient.setQueryData(["/api/cart"], []);
+        
+        toast({
+          title: "Заказ оформлен",
+          description: `Заказ #${data.id} успешно оформлен и оплачен с вашего баланса`,
+          variant: "success"
+        });
+      } else {
+        // Для прямого перевода переходим на этап загрузки подтверждения
+        setStep("questions");
+        
+        toast({
+          title: "Заказ создан",
+          description: `Заказ #${data.id} создан. Пожалуйста, загрузите подтверждение оплаты`,
+        });
+      }
+    },
+    onError: (error: Error) => {
+      console.error("Ошибка при создании заказа:", error);
+      toast({
+        title: "Ошибка оформления заказа",
         description: error.message,
         variant: "destructive"
       });
@@ -265,16 +380,19 @@ export default function CheckoutPage() {
     }
     
     if (step === "payment") {
+      // Получаем метод оплаты
+      const paymentMethod = form.getValues("paymentMethod");
+      
       // Prepare order items
       const items = cartItems.map(item => ({
-        productId: item.id,
+        id: item.id,
         quantity: item.quantity,
         price: typeof item.price === 'string' ? parseFloat(item.price) : item.price,
       }));
       
       // Create order
       const orderData: InsertOrder = {
-        userId: user.id,
+        userId: String(user.id),
         items,
         totalAmount: calculateTotal().toString(),
         deliveryAmount: calculateDeliveryCost().toString(),
@@ -290,23 +408,39 @@ export default function CheckoutPage() {
         needInsulation: data.needInsulation,
       };
       
-      createOrderMutation.mutate(orderData);
+      // Add comment separately if needed
+      const orderDataWithComment = {
+        ...orderData,
+        comment: data.comment || ""
+      };
+      
+      console.log("Отправка данных заказа:", orderDataWithComment);
+      createOrderMutation.mutate(orderDataWithComment);
     }
     
     if (step === "questions" && orderId) {
-      if (data.paymentMethod === "directTransfer" && !paymentProof) {
-        toast({
-          title: "Требуется подтверждение",
-          description: "Загрузите подтверждение платежа",
-          variant: "destructive"
-        });
-        return;
-      }
-      
-      // If payment proof is uploaded, submit it
-      if (paymentProof) {
-        setIsUploading(true);
-        uploadProofMutation.mutate({ id: orderId, file: paymentProof });
+      if (data.paymentMethod === "directTransfer") {
+        // Если файл еще не выбран
+        if (!paymentProof && !proofUploaded) {
+          toast({
+            title: "Требуется подтверждение",
+            description: "Пожалуйста, загрузите подтверждение платежа",
+            variant: "destructive"
+          });
+          return;
+        }
+        
+        // Если файл выбран, но еще не загружен на сервер
+        if (paymentProof && !proofUploaded && !isUploading) {
+          setIsUploading(true);
+          uploadProofMutation.mutate({ id: orderId, file: paymentProof });
+          return;
+        }
+        
+        // Если файл уже загружен, финализируем заказ
+        if (proofUploaded) {
+          completeOrderMutation.mutate(orderId);
+        }
       } else {
         setStep("success");
         
@@ -615,20 +749,32 @@ export default function CheckoutPage() {
                                   </Label>
                                 </div>
                                 
-                                {user?.balance && parseFloat(user.balance) > 0 && (
-                                  <div className="flex items-center space-x-2 border rounded-lg p-4 transition-colors hover:bg-gray-50">
-                                    <RadioGroupItem value="balance" id="balance" />
-                                    <Label htmlFor="balance" className="flex items-center cursor-pointer">
-                                      <Wallet className="h-5 w-5 mr-2 text-primary" />
-                                      <div>
-                                        <div className="font-medium">Баланс</div>
-                                        <div className="text-sm text-gray-500">
-                                          Ваш баланс: {formatPrice(parseFloat(user.balance))} ₽
-                                        </div>
+                                {/* Всегда показываем опцию баланса, но делаем её неактивной если он недостаточен */}
+                                <div className={`flex items-center space-x-2 border rounded-lg p-4 transition-colors ${
+                                  user?.balance && parseFloat(user.balance) >= calculateTotal() 
+                                  ? "hover:bg-gray-50" 
+                                  : "opacity-60 cursor-not-allowed"
+                                }`}>
+                                  <RadioGroupItem 
+                                    value="balance" 
+                                    id="balance" 
+                                    disabled={!user?.balance || parseFloat(user.balance) < calculateTotal()}
+                                  />
+                                  <Label htmlFor="balance" className="flex items-center cursor-pointer">
+                                    <Wallet className="h-5 w-5 mr-2 text-primary" />
+                                    <div>
+                                      <div className="font-medium">Баланс</div>
+                                      <div className="text-sm text-gray-500">
+                                        Ваш баланс: {formatPrice(user?.balance ? parseFloat(user.balance) : 0)} ₽
+                                        {(!user?.balance || parseFloat(user.balance) < calculateTotal()) && (
+                                          <span className="text-red-500 ml-2">
+                                            (Недостаточно средств)
+                                          </span>
+                                        )}
                                       </div>
-                                    </Label>
-                                  </div>
-                                )}
+                                    </div>
+                                  </Label>
+                                </div>
                               </RadioGroup>
                             </FormControl>
                             <FormMessage />
@@ -770,15 +916,38 @@ export default function CheckoutPage() {
                       <Button 
                         type="submit" 
                         className="bg-primary hover:bg-green-700 text-white"
-                        disabled={isUploading || uploadProofMutation.isPending}
+                        disabled={isUploading || uploadProofMutation.isPending || completeOrderMutation.isPending}
                       >
-                        {isUploading || uploadProofMutation.isPending ? (
+                        {isUploading ? (
                           <>
                             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            Отправка...
+                            Загрузка чека...
+                          </>
+                        ) : uploadProofMutation.isPending ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Отправка чека...
+                          </>
+                        ) : completeOrderMutation.isPending ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Завершение заказа...
+                          </>
+                        ) : proofUploaded ? (
+                          <>
+                            <CheckCircle2 className="mr-2 h-4 w-4" />
+                            Завершить заказ
+                          </>
+                        ) : paymentProof ? (
+                          <>
+                            <Upload className="mr-2 h-4 w-4" />
+                            Загрузить чек
                           </>
                         ) : (
-                          "Завершить заказ"
+                          <>
+                            <Upload className="mr-2 h-4 w-4" />
+                            Прикрепить чек
+                          </>
                         )}
                       </Button>
                     </CardFooter>
@@ -804,7 +973,7 @@ export default function CheckoutPage() {
                       <div>
                         <p className="font-medium">{item.name}</p>
                         <div className="flex justify-between text-sm text-gray-600">
-                          <span>Кол-во: {item.quantity}</span>
+                          <span>Кол-во: {item.quantity} шт.</span>
                           <span>
                             {formatPrice(
                               (typeof item.price === 'string' ? parseFloat(item.price) : item.price) * item.quantity

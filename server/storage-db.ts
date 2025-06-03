@@ -24,8 +24,23 @@ export class DatabaseStorage implements IStorage {
 
   // User operations
   async getUser(id: number): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.id, id));
-    return user;
+    try {
+      const user = await db.queryOne("SELECT * FROM users WHERE id = ?", [id]);
+      return transformToUser(user);
+    } catch (e) {
+      console.error("Error getting user:", e);
+      return undefined;
+    }
+  }
+
+  async getUserById(id: string): Promise<User | undefined> {
+    try {
+      const user = await db.queryOne("SELECT * FROM users WHERE id = ?", [id]);
+      return transformToUser(user);
+    } catch (e) {
+      console.error("Error getting user by ID:", e);
+      return undefined;
+    }
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {
