@@ -30,15 +30,14 @@ export default defineConfig({
   },
   root: path.resolve(__dirname, "client"),
   build: {
-    outDir: path.resolve(__dirname, "dist"),
-    emptyOutDir: true,
-    assetsDir: 'assets',
-    rollupOptions: {
-      input: path.resolve(__dirname, "client/index.html"), // Явное указание входного файла
-      output: {
-        assetFileNames: 'assets/[name]-[hash][extname]',
-        entryFileNames: 'assets/[name]-[hash].js',
-      },
-    },
-  },
+  outDir: path.resolve(__dirname, "dist/static"),
+  emptyOutDir: true,
+  rollupOptions: {
+    input: path.resolve(__dirname, "client/index.html"),
+    output: {
+      entryFileNames: 'static/js/[name]-[hash].js',
+      assetFileNames: 'static/assets/[name]-[hash][extname]'
+    }
+  }
+}
 });
